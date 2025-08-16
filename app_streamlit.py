@@ -661,19 +661,6 @@ def main():
     initialize_session_state()
     render_header()
     
-    # Get API keys from secrets
-    openai_api_key, elevenlabs_api_key = get_api_keys()
-    
-    # API Status Display
-    openai_model = render_api_status(openai_api_key, elevenlabs_api_key)
-    
-    # Voice Selection
-    host_name, host_voice, guest_name, guest_voice = render_voice_selection()
-    
-    # Article Input
-    article_url, pause_duration, aussie_style = render_article_section()
-    
-    # Script Generation
     # Language selection
     st.markdown('<div class="section-header"><h3>🌐 Language Selection</h3></div>', unsafe_allow_html=True)
     language = st.selectbox(
@@ -683,30 +670,34 @@ def main():
         help="Choose the language for podcast script and voices."
     )
     st.session_state.selected_language = language
-
+    
+    # Get API keys from secrets
+    openai_api_key, elevenlabs_api_key = get_api_keys()
+    
+    # API Status Display
+    openai_model = render_api_status(openai_api_key, elevenlabs_api_key)
+    
+    # Setup voices based on language selection
     def fetch_urdu_hindi_voices():
         voices = get_available_voices(elevenlabs_api_key)
         urdu_hindi_voices = [v for v in voices if any(lang in v.get('labels', {}).get('language', '').lower() for lang in ['urdu', 'hindi']) or 'urdu' in v.get('name', '').lower() or 'hindi' in v.get('name', '').lower()]
-        if not urdu_hindi_voices:
-            try:
-                api_url = st.secrets.get("custom_voice_api", "http://localhost:8000/voices")
-                resp = requests.get(api_url, timeout=10)
-                resp.raise_for_status()
-                urdu_hindi_voices = resp.json().get("voices", [])
-            except Exception as e:
-                st.error(f"Failed to fetch Urdu/Hindi voices from custom API: {str(e)}")
         return urdu_hindi_voices if urdu_hindi_voices else voices
 
     if language == "Roman Urdu":
+        # Override available voices with Urdu/Hindi voices only
         st.session_state.available_voices = fetch_urdu_hindi_voices()
         st.session_state.voices_loaded = True
         aussie_style = False
     else:
         aussie_style = True
-
+    
+    # Voice Selection
     host_name, host_voice, guest_name, guest_voice = render_voice_selection()
+    
+    # Article Input
     article_url, pause_duration, _ = render_article_section()
 
+    # Script Generation
     def render_script_generation_language(openai_model, article_url, host_name, guest_name, aussie_style, language):
         st.markdown('<div class="section-header"><h3>📝 Script Generation</h3></div>', unsafe_allow_html=True)
         if not all([article_url, host_name, guest_name]):
@@ -725,12 +716,13 @@ def main():
                     openai_api_key, _ = get_api_keys()
                     import openai
                     openai.api_key = openai_api_key
+                    
+                    # Build messages based on language
                     if language == "Roman Urdu":
                         messages = [
-                            {"role": "system", "content": f"You are an expert podcast script writer. Generate a natural, flowing conversation in Roman Urdu (Urdu written in Latin script) between two podcast hosts. Return ONLY valid JSON as {{'script': [{{'speaker': 'host' or 'guest', 'text': 'spoken content in Roman Urdu'}}]}}. Keep turns natural and authentic."},
+                            {"role": "system", "content": "You are an expert podcast script writer. Generate a natural, flowing conversation in Roman Urdu (Urdu written in Latin script) between two podcast hosts. Return ONLY valid JSON as {'script': [{'speaker': 'host' or 'guest', 'text': 'spoken content in Roman Urdu'}]}. Keep turns natural and authentic."},
                             {"role": "user", "content": f"Create a conversational podcast script in Roman Urdu based on this article. ARTICLE TITLE: {article['title']}\nARTICLE CONTENT: {article['text']}\nHosts: {host_name} (host), {guest_name} (guest)."}
                         ]
-                        aussie_style = False
                     else:
                         messages = build_messages(
                             article_title=article["title"],
@@ -739,6 +731,7 @@ def main():
                             guest_name=guest_name,
                             aussie=aussie_style
                         )
+                    
                     progress_bar.progress(80)
                     response = openai.ChatCompletion.create(
                         model=openai_model,
@@ -757,6 +750,8 @@ def main():
                     st.markdown('<div class="success-box">🎉 Script generated successfully!</div>', unsafe_allow_html=True)
                 except Exception as e:
                     st.markdown(f'<div class="error-box">❌ Error: {str(e)}</div>', unsafe_allow_html=True)
+        
+        # Display generated script
         if st.session_state.script_generated and st.session_state.generated_script:
             st.subheader("📋 Generated Script Preview")
             col1, col2, col3 = st.columns(3)
