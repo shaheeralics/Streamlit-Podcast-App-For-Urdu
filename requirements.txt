@@ -1,0 +1,9 @@
+streamlit
+requests
+trafilatura
+readability-lxml
+beautifulsoup4
+lxml
+pydub
+python-dotenv
+openai==0.28.1
